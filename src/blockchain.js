@@ -1,5 +1,5 @@
 /**
- *                          Blockchain Class
+ *  Blockchain Class
  *  The Blockchain class contain the basics functions to create your own private blockchain
  *  It uses libraries like `crypto-js` to create the hashes for each block and `bitcoinjs-message` 
  *  to verify a message signature. The chain is stored in the array
@@ -50,6 +50,20 @@ class Blockchain {
     }
 
     /**
+     * Utility method that return the UTC timestamp
+     */    
+    getCurrentTime() {
+        return parseInt(new Date().getTime().toString().slice(0, -3));
+    }
+
+    /**
+     * Utility method that return the latest block
+     */    
+    getLatestBlock() {
+        return this.chain[this.chain.length - 1];
+    }
+
+    /**
      * _addBlock(block) will store a block in the chain
      * @param {*} block 
      * The method will return a Promise that will resolve with the block added
@@ -63,9 +77,31 @@ class Blockchain {
      */
     _addBlock(block) {
         let self = this;
+
         return new Promise(async (resolve, reject) => {
-           
+            // block height
+            block.height = self.chain.length;            
+
+            // UTC timestamp
+            block.time = self.getCurrentTime();
+            if (self.chain.length > 0) {
+                // previous block hash
+                block.previousBlockHash = self.chain[self.chain.length -1].hash;
+            }
+            
+            // SHA256 requires a string of data
+            block.hash = SHA256(JSON.stringify(block)).toString();
+            //console.log(JSON.stringify(block));
+            
+            // add block to chain
+            self.chain.push(block);
+            
+            // don't for get to update the `this.height`
+            self.height = block.height;
+
+            resolve(block);
         });
+        
     }
 
     /**
@@ -76,9 +112,11 @@ class Blockchain {
      * The method return a Promise that will resolve with the message to be signed
      * @param {*} address 
      */
-    requestMessageOwnershipVerification(address) {
-        return new Promise((resolve) => {
-            
+    requestMessageOwnershipVerification(address) {                
+        let self = this;
+
+        return new Promise((resolve) => {                        
+            resolve(`${address}:${self.getCurrentTime()}:starRegistry`);
         });
     }
 
@@ -101,9 +139,38 @@ class Blockchain {
      */
     submitStar(address, message, signature, star) {
         let self = this;
+    
         return new Promise(async (resolve, reject) => {
+
+            // 1. Get the time from the message sent as a parameter example: `parseInt(message.split(':')[1])`
+            let messageTime = parseInt(message.split(':')[1]);
+
+            // 2. Get the current time: `let currentTime = parseInt(new Date().getTime().toString().slice(0, -3));`
+            let currentTime = self.getCurrentTime();
+
+            // 3. Check if the time elapsed is less than 5 minutes    
+            const isTimeValid = currentTime < (messageTime + (5 * 60 * 1000));            
+            if (!isTimeValid) {            
+                reject('Message time expired!')
+                return;
+            }    
             
+            // 4. Veify the message with wallet address and signature: `bitcoinMessage.verify(message, address, signature)`
+            const isMessageValid = bitcoinMessage.verify(message, address, signature);                
+            if (!isMessageValid) {
+                reject('Invalid Message!')
+                return;
+            }    
+                
+            // 5. Create the block and add it to the chain
+            const block = new BlockClass.Block({ 
+                owner: address, 
+                star: star 
+            });    
+            
+            resolve(self._addBlock(block));                                                                
         });
+        
     }
 
     /**
@@ -114,8 +181,16 @@ class Blockchain {
      */
     getBlockByHash(hash) {
         let self = this;
+        
         return new Promise((resolve, reject) => {
-           
+            let block = self.chain.find((value) => value.hash === hash);
+      
+            if (!block) {
+                reject(new Error('Block not found'));            
+                return;
+            }
+      
+            resolve(block);
         });
     }
 
@@ -145,9 +220,25 @@ class Blockchain {
     getStarsByWalletAddress (address) {
         let self = this;
         let stars = [];
+
         return new Promise((resolve, reject) => {
-            
+            try {                
+                self.chain.forEach(async (block) => {                                        
+                    let data = await block.getBData()                
+                    if (data) {
+                        if (data.owner === address) {
+                            stars.push(data);
+                        } else {
+                            reject("Inconpatible addresses");
+                        }
+                    }                
+                });
+                resolve(stars);
+            } catch (error) {
+                reject(error);
+            }
         });
+
     }
 
     /**
@@ -161,6 +252,33 @@ class Blockchain {
         let errorLog = [];
         return new Promise(async (resolve, reject) => {
             
+            this.validateChain().then((errorLog) => {
+                if (errorLog.length > 0) {
+                  reject(errorLog);
+                  return;
+                }
+        
+                this.getChainHeight().then((height) => {
+                  block.height = height + 1;
+                  block.previousBlockHash = height === -1 ? null : self.chain[height].hash;
+                  block.time = self.getCurrentTime();
+        
+                  let clone = { ...block };
+                  delete clone.hash
+                  block.hash = SHA256(JSON.stringify(clone)).toString();
+        
+                  self.chain.push(block);
+                  self.height = block.height;
+        
+                  resolve(block);
+                }).catch((err) => {
+                  reject(err);
+                });
+        
+            }).catch((error) => {
+                reject(error);
+            });
+
         });
     }
 
