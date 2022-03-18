@@ -91,7 +91,7 @@ class Blockchain {
             
             // SHA256 requires a string of data
             block.hash = SHA256(JSON.stringify(block)).toString();
-            console.log(JSON.stringify(block));
+            //console.log(JSON.stringify(block));
             
             // add block to chain
             self.chain.push(block);
