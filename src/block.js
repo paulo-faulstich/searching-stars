@@ -37,17 +37,19 @@ class Block {
      */
     validate() {
         let self = this;
+        // 1. Return a new promise to allow the method be called asynchronous.
         return new Promise((resolve) => {
-            // Save in auxiliary variable the current block hash
-            let currentHash = self.hash;                  
+            // 2. Save the in auxiliary variable the current hash of the block (`this` represent the block object)
+            const currentHash = self.hash;
+            self.hash = null;
             
-            // Recalculate the hash of the Block
-            self.hash = SHA256(JSON.stringify(currentHash)).toString();
-            
-            // Comparing if the hashes changed
-            // Returning the Block is not valid            
-            // Returning the Block is valid
-            resolve(self.hash === currentHash);
+            // 3. Recalculate the hash of the entire block (Use SHA256 from crypto-js library)
+            const newHash = SHA256(JSON.stringify(self)).toString();
+            self.hash = newHash
+
+            // 4. Compare if the auxiliary hash value is different from the calculated one.
+            // 5. Resolve true or false depending if it is valid or not.
+            resolve(currentHash === newHash)
         });
     }
 
